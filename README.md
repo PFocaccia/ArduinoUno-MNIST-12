@@ -2,7 +2,7 @@
 
 **Handwritten digit recognition on an 8-bit Arduino Uno R3 with 2 KB of SRAM.**
 
-This project runs the ONNX Model Zoo’s **INT8 MNIST-12** convolutional network directly on the ATmega328P. A Linux host streams 28 × 28 grayscale images over USB serial. The Uno runs the full forward pass and returns a digit and a hardware cycle count.
+This project runs the ONNX Model Zoo's **INT8 MNIST-12** convolutional network directly on the ATmega328P. A Linux host streams 28 × 28 grayscale images over USB serial. The Uno runs the full forward pass and returns a digit and a hardware cycle count.
 
 The Uno correctly classified **986 of the first 1,000 MNIST test images (98.6%)**, with a mean inference time of **989.368 ms** at 16 MHz.
 
@@ -13,6 +13,24 @@ The Uno correctly classified **986 of the first 1,000 MNIST test images (98.6%)*
 | CPU cycles per inference | 15,829,886 | 15,791,529 | 15,856,746 |
 | Inference time | 989.368 ms | 986.971 ms | 991.047 ms |
 
+## Memory footprint
+
+The firmware fits within the memory constraints of the ATmega328P without requiring external memory.
+
+| Memory | Used | Available | Utilization |
+| --- | ---: | ---: | ---: |
+| Program flash | 10,472 B | 32,256 B | 32.5% |
+| Static SRAM | 1,770 B | 2,048 B | 86.4% |
+
+The compiled firmware leaves **278 bytes of SRAM** available for the stack and other runtime memory requirements.
+
+The two main static buffers account for 1,584 bytes:
+
+- **Input image buffer:** 1,024 bytes (32 × 32).
+- **Circular activation buffer:** 560 bytes (5 × 14 × 8).
+
+Memory usage is reported by Arduino CLI at compile time. The SRAM figure represents static memory allocation and does not include peak stack usage.
+
 ## How it fits
 
 - **Keep the weights in flash.** The first convolution copies one 5 × 5 filter into SRAM and reuses it across pooling windows. The second convolution reads its weights from flash in channel order, using incrementing pointers for both weights and activations.
@@ -22,7 +40,11 @@ The Uno correctly classified **986 of the first 1,000 MNIST test images (98.6%)*
 
 ## Host and device
 
-The C program on the PC drives the benchmark. It configures the serial port with POSIX `termios`, sends one image, waits for the Uno’s response, and repeats. The firmware receives each row directly into its padded image buffer. Timer1 measures the forward pass, including the dense layer. The time reported by the host is calculated from the cycle count at the Uno’s nominal 16 MHz clock. Serial transfers happen outside the measured interval.
+The C program on the PC drives the benchmark. It configures the serial port with POSIX `termios`, sends one image, waits for the Uno's response, and repeats. Serial transfers use `poll()` with timeout handling and support partial reads and writes.
+
+The firmware receives each row directly into its padded image buffer. Timer1 measures the forward pass, including the dense layer, through direct hardware register configuration and an overflow interrupt service routine.
+
+The time reported by the host is calculated from the cycle count at the Uno's nominal 16 MHz clock. Serial transfers happen outside the measured interval.
 
 The binary protocol runs at **115200 baud, 8N1**.
 
