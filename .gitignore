@@ -1,0 +1,7 @@
+/.arduino/
+/arduino-env.sh
+/cnn/build/
+/server/mnist-bench
+/.agents/
+/.aws/
+/.codex/
